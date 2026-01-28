@@ -1,0 +1,32 @@
+name = "neonvault"
+main = "src/index.ts"
+compatibility_date = "2026-01-15"
+workers_dev = false
+
+# Custom domain routing is set in Cloudflare dashboard or via wrangler routes.
+# Example route: vault.neoncovenant.com/*
+
+[vars]
+ENVIRONMENT = "production"
+# Access defense-in-depth:
+ACCESS_TEAM_DOMAIN = "YOURTEAM.cloudflareaccess.com"
+ACCESS_AUD = "YOUR_ACCESS_APPLICATION_AUD" # from Access app settings
+# Performance knobs:
+METADATA_CACHE_TTL_SECONDS = "60"
+RATE_LIMIT_RPM = "120"
+
+[[r2_buckets]]
+binding = "R2_BUCKET_VAULT"
+bucket_name = "neonvault-prod"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "neonvault-prod"
+database_id = "REPLACE_ME"
+
+[[kv_namespaces]]
+binding = "KV_CONFIG"
+id = "REPLACE_ME"
+
+[observability]
+enabled = true
