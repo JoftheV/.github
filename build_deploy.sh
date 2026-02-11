@@ -13,6 +13,7 @@ PROJECT_NAME="YourApp"
 SCHEME_NAME="YourApp-Production"  # Ensure this scheme is 'Shared' in Xcode
 BUNDLE_ID="com.you.yourapp"
 IS_WORKSPACE=false                 # Set true if using CocoaPods/SPM workspace
+ENABLE_RADIO_SCAN=true             # Set false to skip Bluetooth/Wi-Fi environment scan
 
 # Paths
 OUTPUT_DIR="./Builds"
@@ -22,6 +23,7 @@ PLIST_PATH="./$PROJECT_NAME/Info.plist"
 EXPORT_OPTIONS_PLIST="./exportOptions.plist" # Create this via Xcode -> Export for a template
 SPM_CACHE_DIR="./SourcePackages"
 TEST_RESULTS_PATH="$OUTPUT_DIR/TestResults"
+SCAN_DIR="$OUTPUT_DIR/RadioScans"
 
 # Performance Flags
 THREADS="$(sysctl -n hw.ncpu)" # Use all available cores
@@ -58,7 +60,7 @@ require_file() {
 }
 
 setup_env() {
-    mkdir -p "$OUTPUT_DIR" "$EXPORT_PATH" "$SPM_CACHE_DIR"
+    mkdir -p "$OUTPUT_DIR" "$EXPORT_PATH" "$SPM_CACHE_DIR" "$SCAN_DIR"
 
     if ! command -v xcodebuild >/dev/null 2>&1; then
         echo -e "${RED}❌  xcodebuild is required but not available in PATH.${NC}"
@@ -77,6 +79,68 @@ setup_env() {
     fi
 
     require_file "$CONTAINER_FILE"
+}
+
+scan_wifi() {
+    local wifi_output="$1"
+    local airport_bin="/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
+
+    {
+        echo "[wifi] started at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        if [ -x "$airport_bin" ]; then
+            "$airport_bin" -s || true
+        elif command -v networksetup >/dev/null 2>&1; then
+            networksetup -listallhardwareports || true
+            networksetup -listpreferredwirelessnetworks en0 || true
+        else
+            echo "No Wi-Fi scan utility found (airport/networksetup unavailable)."
+        fi
+        echo "[wifi] finished at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    } >"$wifi_output" 2>&1
+}
+
+scan_bluetooth() {
+    local bluetooth_output="$1"
+
+    {
+        echo "[bluetooth] started at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        if command -v blueutil >/dev/null 2>&1; then
+            blueutil --power || true
+            blueutil --paired || true
+            blueutil --connected || true
+        elif command -v system_profiler >/dev/null 2>&1; then
+            system_profiler SPBluetoothDataType || true
+        else
+            echo "No Bluetooth scan utility found (blueutil/system_profiler unavailable)."
+        fi
+        echo "[bluetooth] finished at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    } >"$bluetooth_output" 2>&1
+}
+
+run_radio_scan() {
+    if [ "$ENABLE_RADIO_SCAN" != true ]; then
+        return 0
+    fi
+
+    local scan_stamp
+    local wifi_output
+    local bluetooth_output
+    scan_stamp=$(date +%Y%m%d%H%M%S)
+    wifi_output="$SCAN_DIR/wifi_scan_${scan_stamp}.log"
+    bluetooth_output="$SCAN_DIR/bluetooth_scan_${scan_stamp}.log"
+
+    echo_stage "Scanning Bluetooth & Wi-Fi Environment"
+
+    scan_wifi "$wifi_output" &
+    local wifi_pid=$!
+    scan_bluetooth "$bluetooth_output" &
+    local bluetooth_pid=$!
+
+    wait "$wifi_pid" || true
+    wait "$bluetooth_pid" || true
+
+    echo -e "${GREEN}Wi-Fi scan log: $wifi_output${NC}"
+    echo -e "${GREEN}Bluetooth scan log: $bluetooth_output${NC}"
 }
 
 run_archive() {
@@ -108,6 +172,7 @@ run_archive() {
 # ==============================================================================
 
 setup_env
+run_radio_scan
 
 # 1. CLEANUP & DEPENDENCIES
 echo_stage "Cleaning & Resolving Dependencies"

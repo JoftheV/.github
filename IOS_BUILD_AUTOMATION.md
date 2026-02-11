@@ -4,7 +4,7 @@ This repository includes a `build_deploy.sh` script intended for macOS runners a
 
 ## Included files
 
-- `build_deploy.sh`: Fast `xcodebuild`-based pipeline (Clean → Resolve → Version → Test → Archive → Export).
+- `build_deploy.sh`: Fast `xcodebuild`-based pipeline (Clean → Resolve → Version → Test → Archive → Export) with optional Bluetooth/Wi-Fi scan logging.
 - `exportOptions.testflight.plist`: Template for TestFlight/App Store upload flow.
 - `exportOptions.enterprise.plist`: Template for Enterprise in-house distribution.
 
@@ -19,6 +19,12 @@ This repository includes a `build_deploy.sh` script intended for macOS runners a
 chmod +x build_deploy.sh
 ./build_deploy.sh
 ```
+
+## Bluetooth/Wi-Fi scanning integration
+
+- Scanning is enabled by default via `ENABLE_RADIO_SCAN=true`.
+- The script runs Wi-Fi and Bluetooth scans in parallel and writes timestamped logs under `Builds/RadioScans`.
+- To disable scanning, set `ENABLE_RADIO_SCAN=false`.
 
 ## Notes
 
