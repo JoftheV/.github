@@ -23,6 +23,10 @@ function route(url: URL) {
   return p;
 }
 
+function pathParts(path: string) {
+  return path.split("/").filter(Boolean);
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
@@ -40,6 +44,9 @@ export default {
 
       const p = route(url);
       const m = req.method.toUpperCase();
+      const parts = pathParts(p);
+      const isObjectRoute = parts[0] === "v1" && parts[1] === "objects";
+      const objectId = isObjectRoute ? parts[2] : undefined;
 
       // Health
       if (p === "/health") {
@@ -56,8 +63,8 @@ export default {
       }
 
       // Get metadata
-      if (p.startsWith("/v1/objects/") && p.endsWith("/meta") && m === "GET") {
-        const id = p.split("/")[3];
+      if (isObjectRoute && parts[3] === "meta" && m === "GET" && objectId) {
+        const id = objectId;
         const cached = await getMetaCached(env, id, ident.sub);
         if (cached) {
           ctx.waitUntil(
@@ -121,8 +128,8 @@ export default {
 
       // Download (stream through Worker)
       // GET /v1/objects/:id/download
-      if (p.startsWith("/v1/objects/") && p.endsWith("/download") && m === "GET") {
-        const id = p.split("/")[3];
+      if (isObjectRoute && parts[3] === "download" && m === "GET" && objectId) {
+        const id = objectId;
         const meta = await getObjectById(env, id);
         if (!meta || meta.owner_sub !== ident.sub) throw err(404, "Not found");
 
@@ -142,8 +149,8 @@ export default {
 
       // Delete (soft-delete in DB; delete from R2)
       // DELETE /v1/objects/:id
-      if (p.startsWith("/v1/objects/") && m === "DELETE") {
-        const id = p.split("/")[3];
+      if (isObjectRoute && parts.length === 3 && m === "DELETE" && objectId) {
+        const id = objectId;
         const meta = await getObjectById(env, id);
         if (!meta || meta.owner_sub !== ident.sub) throw err(404, "Not found");
 
