@@ -1,10 +1,10 @@
 import { requireAccessIdentity, type AccessIdentity } from "./auth/accessJwt";
 import { json, err } from "./util/json";
-import { newId } from "./util/crypto";
+import { newId, sha256HexFromStream } from "./util/crypto";
 import { audit } from "./services/audit";
 import { rateLimitOrThrow } from "./services/rateLimit";
 import { getMetaCached, putMetaCache, delMetaCache } from "./services/cache";
-import { createObject, getObjectById, listObjectsByOwner, markDeleted } from "./services/objects";
+import { createObject, getObjectByIdForOwner, listObjectsByOwner, markDeleted } from "./services/objects";
 
 export interface Env {
   ENVIRONMENT: string;
@@ -66,8 +66,8 @@ export default {
           return json({ meta: cached, cached: true, requestId });
         }
 
-        const meta = await getObjectById(env, id);
-        if (!meta || meta.owner_sub !== ident.sub) throw err(404, "Not found");
+        const meta = await getObjectByIdForOwner(env, id, ident.sub);
+        if (!meta) throw err(404, "Not found");
         await putMetaCache(env, meta, ident.sub);
 
         ctx.waitUntil(
@@ -85,9 +85,12 @@ export default {
         const id = newId();
         const r2Key = `${ident.sub}/${id}/${filename}`;
 
-        // Stream request body to R2
+        // Stream request body to R2 while hashing for integrity metadata.
         if (!req.body) throw err(400, "Missing body");
-        await env.R2_BUCKET_VAULT.put(r2Key, req.body, {
+        const [uploadBody, hashBody] = req.body.tee();
+
+        const hashPromise = sha256HexFromStream(hashBody);
+        await env.R2_BUCKET_VAULT.put(r2Key, uploadBody, {
           httpMetadata: { contentType },
           customMetadata: { owner_sub: ident.sub, owner_email: ident.email ?? "" }
         });
@@ -96,8 +99,7 @@ export default {
         const sizeHeader = req.headers.get("content-length");
         const sizeBytes = sizeHeader ? Number(sizeHeader) : 0;
 
-        // Optional: compute sha256 if you want integrity (cost: CPU). For big files, do it async in a background job.
-        const sha256Hex = null;
+        const sha256Hex = await hashPromise;
 
         await createObject(env, {
           id,
@@ -123,8 +125,8 @@ export default {
       // GET /v1/objects/:id/download
       if (p.startsWith("/v1/objects/") && p.endsWith("/download") && m === "GET") {
         const id = p.split("/")[3];
-        const meta = await getObjectById(env, id);
-        if (!meta || meta.owner_sub !== ident.sub) throw err(404, "Not found");
+        const meta = await getObjectByIdForOwner(env, id, ident.sub);
+        if (!meta) throw err(404, "Not found");
 
         const obj = await env.R2_BUCKET_VAULT.get(meta.r2_key);
         if (!obj) throw err(404, "Not found in storage");
@@ -144,8 +146,8 @@ export default {
       // DELETE /v1/objects/:id
       if (p.startsWith("/v1/objects/") && m === "DELETE") {
         const id = p.split("/")[3];
-        const meta = await getObjectById(env, id);
-        if (!meta || meta.owner_sub !== ident.sub) throw err(404, "Not found");
+        const meta = await getObjectByIdForOwner(env, id, ident.sub);
+        if (!meta) throw err(404, "Not found");
 
         await env.R2_BUCKET_VAULT.delete(meta.r2_key);
         await markDeleted(env, id); // or hard-delete row if you prefer

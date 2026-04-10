@@ -6,8 +6,8 @@ export async function createObject(env: any, o: any) {
   await stmt.bind(o.id, o.r2_key, o.owner_sub, o.owner_email, o.filename, o.content_type, o.size_bytes, o.sha256_hex, o.tags_json).run();
 }
 
-export async function getObjectById(env: any, id: string) {
-  const row = await env.DB.prepare(`SELECT * FROM objects WHERE id = ?`).bind(id).first();
+export async function getObjectByIdForOwner(env: any, id: string, ownerSub: string) {
+  const row = await env.DB.prepare(`SELECT * FROM objects WHERE id = ? AND owner_sub = ?`).bind(id, ownerSub).first();
   return row || null;
 }
 
