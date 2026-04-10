@@ -1,7 +1,5 @@
 # X Developer Platform Resources
 
-![Screenshot 2024-03-25 at 6 57 14 PM](https://github.com/twitterdev/.github/assets/5976670/35eeeadc-a227-43b9-aa74-861e20583d7e)
-
 Code examples and resources for getting started with (or, getting inspired by!) the [X API](https://developer.x.com) 
 
 ## Getting started
